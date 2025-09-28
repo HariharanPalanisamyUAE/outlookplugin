@@ -36,6 +36,11 @@ step: 4
 step: 5
     uvicorn main:app --reload
 
+step: 6
+    modify manifest.xml for outloog add ins update
+step: 7
+    upload addins in your outlook plugin
+
 
 
 Docker will be updated soon
@@ -64,5 +69,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 _
+
 
 
