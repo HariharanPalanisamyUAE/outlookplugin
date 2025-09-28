@@ -1,4 +1,6 @@
-_Email Security Monitor - Outlook Plugin
+Email Security Monitor - Outlook Plugin
+
+
 colab notebook for AI model - https://colab.research.google.com/drive/1C8GgH9_BexFJlsRc5ij4B9dmIha0bI-6?usp=sharing
 seamlessly with Microsoft Outlook to detect spam and phishing emails in real-time using machine learning.
 Features
@@ -43,3 +45,4 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 _
+
