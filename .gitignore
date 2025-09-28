@@ -1,0 +1,39 @@
+    # Byte-compiled / optimized files
+    __pycache__/
+    *.pyc
+    *.pyd
+    *.pyo
+
+    # Virtual environment
+    venv/
+    .venv/
+    env/
+    env
+    env/
+    venv/
+    ENV/
+    env.bak/
+    venv.bak/
+    # Editor/IDE files
+    .vscode/
+    .idea/
+    *.sublime-project
+    *.sublime-workspace
+
+    # OS generated files
+    .DS_Store
+    Thumbs.db
+
+    # Test and coverage
+    .coverage
+    .pytest_cache/
+    htmlcov/
+
+    # Logs
+    *.log
+
+    # Environment variables
+    .envenv/
+venv/
+__pycache__/
+*.pyc

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+</head>
+<body>
+    <script>
+        Office.onReady(() => {
+            Office.actions.associate("quickScanEmail", quickScanEmail);
+            Office.actions.associate("reportThreat", reportThreat);
+        });
+
+        async function analyzeCurrentEmail() {
+            try {
+                // Get email data from Outlook
+                const item = Office.context.mailbox.item;
+                const emailBody = await new Promise((resolve, reject) => {
+                    item.body.getAsync("text", (result) => {
+                        if (result.status === Office.AsyncResultStatus.Succeeded) {
+                            resolve(result.value);
+                        } else {
+                            reject(new Error('Failed to get email body'));
+                        }
+                    });
+                });
+
+                const subject = item.subject || '';
+                const sender = item.sender ? item.sender.emailAddress : '';
+                
+                // Get CC and BCC if available
+                let cc = '';
+                let bcc = '';
+                
+                if (item.cc && item.cc.length > 0) {
+                    cc = item.cc.map(recipient => recipient.emailAddress).join(', ');
+                }
+                
+                // Analyze email using FastAPI backend
+                const response = await fetch('http://localhost:5000/api/analyze-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        body: emailBody || '',
+                        subject: subject || '',
+                        sender: sender || '',
+                        cc: cc,
+                        bcc: bcc,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Analysis failed');
+                }
+
+                const result = await response.json();
+                return result;
+                
+            } catch (error) {
+                console.error('Error analyzing email:', error);
+                throw error;
+            }
+        }
+
+        async function quickScanEmail(event) {
+            try {
+                const result = await analyzeCurrentEmail();
+                
+                if ((result.prediction === 'spam' || result.prediction === 'phishing') && result.confidence >= 0.7) {
+                    Office.context.mailbox.item.notificationMessages.addAsync("threat", {
+                        type: "errorMessage",
+                        message: `🚨 ${result.prediction.toUpperCase()} DETECTED (${(result.confidence * 100).toFixed(1)}% confidence)`,
+                        persistent: true
+                    });
+                } else {
+                    Office.context.mailbox.item.notificationMessages.addAsync("safe", {
+                        type: "informationalMessage", 
+                        message: "✅ Email appears safe"
+                    });
+                }
+            } catch (error) {
+                console.error("Scan error:", error);
+                Office.context.mailbox.item.notificationMessages.addAsync("error", {
+                    type: "errorMessage",
+                    message: "❌ Analysis failed: " + error.message,
+                    persistent: true
+                });
+            }
+            event.completed();
+        }
+
+        async function reportThreat(event) {
+            try {
+                const item = Office.context.mailbox.item;
+                
+                // Report threat to FastAPI backend
+                const response = await fetch('http://localhost:5000/api/report-threat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sender: item.sender?.emailAddress || 'Unknown',
+                        subject: item.subject || '',
+                        timestamp: new Date().toISOString()
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to report threat');
+                }
+
+                Office.context.mailbox.item.notificationMessages.addAsync("reportSuccess", {
+                    type: "informationalMessage",
+                    message: "⚠️ Threat reported to SOC team!",
+                    persistent: false
+                });
+                
+            } catch (error) {
+                console.error('Error reporting threat:', error);
+                Office.context.mailbox.item.notificationMessages.addAsync("reportError", {
+                    type: "errorMessage",
+                    message: "❌ Failed to report threat: " + error.message,
+                    persistent: false
+                });
+            }
+            event.completed();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="MailApp">
+
+  <!-- Basic information -->
+  <Id>266e2da0-08da-4549-8a30-9f86cb8a7934</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Hariharan</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Email Security Monitor"/>
+  <Description DefaultValue="Automatically scans emails for spam and phishing threats."/>
+  <IconUrl DefaultValue="https://hariharanpalanisamy.com/assets/icon-64.png"/>
+  <HighResolutionIconUrl DefaultValue="https://hariharanpalanisamy.com/assets/icon-128.png"/>
+  <SupportUrl DefaultValue="https://hariharanpalanisamy.com"/>
+  
+  <AppDomains>
+    <AppDomain>https://hariharanpalanisamy.com</AppDomain>
+  </AppDomains>
+
+  <!-- Hosts supported -->
+  <Hosts>
+    <Host Name="Mailbox"/>
+  </Hosts>
+
+  <!-- Requirements -->
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="Mailbox" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+  <FormSettings>
+        <Form xsi:type="ItemRead">
+            <DesktopSettings>
+                <SourceLocation DefaultValue="https://hariharanpalanisamy.com/plugin.html"/>
+                <RequestedHeight>250</RequestedHeight>
+            </DesktopSettings>
+        </Form>
+  </FormSettings>
+  <!-- FIXED: FormSettings with RequestedHeight added back -->
+
+
+  <!-- Permissions -->
+  <Permissions>ReadWriteMailbox</Permissions>
+
+  <!-- Activation rules -->
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
+  </Rule>
+
+  <!-- Version overrides for modern features -->
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides"
+                    xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+                    xsi:type="VersionOverridesV1_0">
+    
+    <Requirements>
+      <bt:Sets DefaultMinVersion="1.1">
+        <bt:Set Name="Mailbox" MinVersion="1.1"/>
+      </bt:Sets>
+    </Requirements>
+    
+    <Hosts>
+      <Host xsi:type="MailHost">
+        <DesktopFormFactor>
+          <FunctionFile resid="functionFile"/>
+          
+          <!-- Message Read Commands -->
+          <ExtensionPoint xsi:type="MessageReadCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="SecurityGroup">
+                <Label resid="SecurityGroupLabel"/>
+                
+                <!-- Quick Scan Button -->
+                <Control xsi:type="Button" id="quickScanButton">
+                  <Label resid="QuickScanButtonLabel"/>
+                  <Supertip>
+                    <Title resid="QuickScanButtonTitle"/>
+                    <Description resid="QuickScanButtonDesc"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="icon16"/>
+                    <bt:Image size="32" resid="icon32"/>
+                    <bt:Image size="80" resid="icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>quickScanEmail</FunctionName>
+                  </Action>
+                </Control>
+
+                <!-- Deep Analysis Button -->
+                <Control xsi:type="Button" id="deepAnalysisButton">
+                  <Label resid="DeepAnalysisButtonLabel"/>
+                  <Supertip>
+                    <Title resid="DeepAnalysisButtonTitle"/>
+                    <Description resid="DeepAnalysisButtonDesc"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="icon16"/>
+                    <bt:Image size="32" resid="icon32"/>
+                    <bt:Image size="80" resid="icon80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="TaskpaneUrl"/>
+                  </Action>
+                </Control>
+
+                <!-- Report Threat Button -->
+                <Control xsi:type="Button" id="reportThreatButton">
+                  <Label resid="ReportThreatButtonLabel"/>
+                  <Supertip>
+                    <Title resid="ReportThreatButtonTitle"/>
+                    <Description resid="ReportThreatButtonDesc"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="icon16"/>
+                    <bt:Image size="32" resid="icon32"/>
+                    <bt:Image size="80" resid="icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>reportThreat</FunctionName>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+    <Resources>
+      <bt:Images>
+        <bt:Image id="icon16" DefaultValue="https://hariharanpalanisamy.com/assets/icon-16.png"/>
+        <bt:Image id="icon32" DefaultValue="https://hariharanpalanisamy.com/assets/icon-32.png"/>
+        <bt:Image id="icon80" DefaultValue="https://hariharanpalanisamy.com/assets/icon-80.png"/>
+      </bt:Images>
+      
+      <bt:Urls>
+        <bt:Url id="functionFile" DefaultValue="https://hariharanpalanisamy.com/functions.html"/>
+        <bt:Url id="TaskpaneUrl" DefaultValue="https://hariharanpalanisamy.com/plugin.html"/>
+      </bt:Urls>
+      
+      <bt:ShortStrings>
+        <bt:String id="SecurityGroupLabel" DefaultValue="Security Tools"/>
+        <bt:String id="QuickScanButtonLabel" DefaultValue="Quick Scan"/>
+        <bt:String id="QuickScanButtonTitle" DefaultValue="Quick Security Scan"/>
+        <bt:String id="DeepAnalysisButtonLabel" DefaultValue="Deep Analysis"/>
+        <bt:String id="DeepAnalysisButtonTitle" DefaultValue="Detailed Analysis"/>
+        <bt:String id="ReportThreatButtonLabel" DefaultValue="Report Threat"/>
+        <bt:String id="ReportThreatButtonTitle" DefaultValue="Report Security Threat"/>
+      </bt:ShortStrings>
+      
+      <bt:LongStrings>
+        <bt:String id="QuickScanButtonDesc" DefaultValue="Quickly scan this email for spam and phishing threats."/>
+        <bt:String id="DeepAnalysisButtonDesc" DefaultValue="Open detailed security analysis with comprehensive threat detection."/>
+        <bt:String id="ReportThreatButtonDesc" DefaultValue="Report this email as a security threat to the SOC team."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
