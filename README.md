@@ -22,6 +22,25 @@ Features
     Confidence Scoring: AI-driven confidence levels for each detection
 
 
+step: 1
+    python -m venv venv 
+    
+step: 2
+    source venv/bin/activate
+
+step: 3
+    pip install -r requirements.txt
+
+step: 4
+    config env with postgres connection values
+step: 5
+    uvicorn main:app --reload
+
+
+
+Docker will be updated soon
+
+
 MIT License
 
 Copyright (c) 2025 Hariharan Palanisamy
@@ -45,4 +64,5 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 _
+
 
