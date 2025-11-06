@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: email_security_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-email_security}
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-securepassword123}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - email_security_network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: email_security_app
+    environment:
+      DB_NAME: ${DB_NAME:-email_security}
+      DB_USER: ${DB_USER:-admin}
+      DB_PASSWORD: ${DB_PASSWORD:-securepassword123}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/venv
+    networks:
+      - email_security_network
+    command: uvicorn main:app --host 0.0.0.0 --port 5000 --reload
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  email_security_network:
+    driver: bridge

@@ -6,6 +6,7 @@ annotated-types==0.7.0
 anyio==3.7.1
 astunparse==1.6.3
 attrs==25.3.0
+bcrypt==4.1.2
 certifi==2025.8.3
 charset-normalizer==3.4.3
 click==8.2.1
@@ -39,10 +40,12 @@ multidict==6.6.4
 multiprocess==0.70.16
 namex==0.1.0
 numpy==2.3.2
+openai==1.12.0
 opt_einsum==3.4.0
 optree==0.17.0
 packaging==25.0
 pandas==2.3.2
+passlib==1.7.4
 pillow==11.3.0
 propcache==0.3.2
 protobuf==6.32.0
@@ -53,6 +56,7 @@ pydantic_core==2.33.2
 Pygments==2.19.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
+python-jose[cryptography]==3.3.0
 python-multipart==0.0.20
 pytz==2025.2
 PyYAML==6.0.2
