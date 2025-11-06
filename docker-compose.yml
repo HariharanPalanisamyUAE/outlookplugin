@@ -48,6 +48,20 @@ services:
       - email_security_network
     command: uvicorn main:app --host 0.0.0.0 --port 5000 --reload
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: email_security_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - app
+    networks:
+      - email_security_network
+    environment:
+      - VITE_API_URL=http://localhost:5000
+
 volumes:
   postgres_data:
     driver: local
