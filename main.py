@@ -1,8 +1,9 @@
-from fastapi import FastAPI, Request, Body, HTTPException
+from fastapi import FastAPI, Request, Body, HTTPException, Depends, status
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.security import OAuth2PasswordRequestForm
 import joblib
 import numpy as np
 import pandas as pd
@@ -15,18 +16,28 @@ import os
 from typing import Dict, Any
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi.templating import Jinja2Templates
 import tensorflow as tf
 from dotenv import load_dotenv
 
+# Import authentication and OpenAI modules
+from auth import (
+    authenticate_user, create_access_token, get_current_active_user,
+    Token, User, get_password_hash
+)
+from openai_analyzer import analyze_email_with_openai, combine_predictions
+
 load_dotenv()  # Load environment variables from .env file
+
+# Configuration
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '30'))
+
 # Database configuration
 DB_CONFIG = {
-    'dbname': os.getenv('DB_NAME', 'DB_NAME'),
-    'user': os.getenv('DB_USER', 'DB_USER'),
-    'password': os.getenv('DB_PASSWORD', 'DB_PASSWORD'),
-    'host': os.getenv('DB_HOST', 'HOST'),
-    'port': os.getenv('DB_PORT', 'PORt')
+    'dbname': os.getenv('DB_NAME', 'email_security'),
+    'user': os.getenv('DB_USER', 'admin'),
+    'password': os.getenv('DB_PASSWORD', 'securepassword123'),
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'port': os.getenv('DB_PORT', '5432')
 }
 
 # Global variables for model components
@@ -218,38 +229,68 @@ class ActionLogRequest(BaseModel):
 
 @app.post("/api/analyze-email")
 async def analyze_email(request: EmailAnalysisRequest):
-    """Analyze email for spam/phishing detection with enhanced data storage"""
+    """Analyze email for spam/phishing detection with ML + OpenAI integration"""
     try:
         email_text = f"{request.subject or ''} {request.body or ''}"
-        
-        if not model or not tfidf or not label_encoder:
-            raise HTTPException(status_code=500, detail="Model not loaded")
-        
-        # Preprocess and predict
-        email_tfidf = tfidf.transform([str(email_text)]).toarray()
-        prediction_probs = model.predict(email_tfidf)[0]
-        predicted_class = np.argmax(prediction_probs)
-        confidence = float(prediction_probs[predicted_class])
-        
-        prediction = label_encoder.inverse_transform([predicted_class])[0]
-        
-        # Log to PostgreSQL database with enhanced data
+
+        # ML Model Analysis
+        ml_prediction = "unknown"
+        ml_confidence = 0.0
+
+        if model and tfidf and label_encoder:
+            try:
+                email_tfidf = tfidf.transform([str(email_text)]).toarray()
+                prediction_probs = model.predict(email_tfidf)[0]
+                predicted_class = np.argmax(prediction_probs)
+                ml_confidence = float(prediction_probs[predicted_class])
+                ml_prediction = label_encoder.inverse_transform([predicted_class])[0]
+            except Exception as e:
+                print(f"ML model error: {e}")
+
+        # OpenAI Analysis (if API key is configured)
+        openai_analysis = analyze_email_with_openai(
+            request.sender or "unknown",
+            request.subject or "",
+            request.body or ""
+        )
+
+        # Combine predictions
+        if openai_analysis.get("success"):
+            combined = combine_predictions(
+                ml_prediction,
+                ml_confidence,
+                openai_analysis.get("prediction", "unknown"),
+                openai_analysis.get("confidence", 0.0)
+            )
+            final_prediction = combined["prediction"]
+            final_confidence = combined["confidence"]
+            openai_reasoning = openai_analysis.get("reasoning", "")
+        else:
+            # Fallback to ML model only
+            final_prediction = ml_prediction
+            final_confidence = ml_confidence
+            openai_reasoning = "OpenAI analysis not available"
+
+        # Only show notification if confidence > 70%
+        show_notification = final_confidence >= 0.7 and final_prediction in ['spam', 'phishing']
+
+        # Log to PostgreSQL database
         conn = get_pg_connection()
         cursor = conn.cursor()
-        
+
         try:
-            # Insert main email analysis
             cursor.execute('''
-                INSERT INTO email_analysis 
-                (sender, subject, body, prediction, confidence, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO email_analysis
+                (sender, subject, body, prediction, confidence, timestamp, openai_analysis, user_email)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
-            ''', (request.sender, request.subject, request.body, 
-                  prediction, confidence, datetime.now()))
-            
+            ''', (request.sender, request.subject, request.body,
+                  final_prediction, final_confidence, datetime.now(),
+                  openai_reasoning, request.sender))
+
             email_id = cursor.fetchone()[0]
-            
-            # Store CC recipients if provided
+
+            # Store CC/BCC if provided
             if hasattr(request, 'cc') and request.cc:
                 cc_emails = [email.strip() for email in request.cc.split(',') if email.strip()]
                 for cc_email in cc_emails:
@@ -257,8 +298,7 @@ async def analyze_email(request: EmailAnalysisRequest):
                         INSERT INTO email_cc (email_id, cc_email)
                         VALUES (%s, %s)
                     ''', (email_id, cc_email))
-            
-            # Store BCC recipients if provided
+
             if hasattr(request, 'bcc') and request.bcc:
                 bcc_emails = [email.strip() for email in request.bcc.split(',') if email.strip()]
                 for bcc_email in bcc_emails:
@@ -266,20 +306,23 @@ async def analyze_email(request: EmailAnalysisRequest):
                         INSERT INTO email_bcc (email_id, bcc_email)
                         VALUES (%s, %s)
                     ''', (email_id, bcc_email))
-            
+
             conn.commit()
-            
+
         finally:
             cursor.close()
             conn.close()
-        
+
         return {
-            'prediction': prediction,
-            'confidence': confidence,
+            'prediction': final_prediction,
+            'confidence': final_confidence,
             'timestamp': datetime.now().isoformat(),
-            'email_id': email_id
+            'email_id': email_id,
+            'show_notification': show_notification,
+            'ml_prediction': ml_prediction,
+            'openai_analysis': openai_reasoning if openai_analysis.get("success") else None
         }
-        
+
     except Exception as e:
         print(f"Error in analyze_email: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -329,9 +372,100 @@ async def log_action(request: ActionLogRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Authentication Endpoints
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Admin login page"""
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@app.post("/api/admin/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """Authenticate admin user and return JWT token"""
+    try:
+        conn = get_pg_connection()
+        user = authenticate_user(conn, form_data.username, form_data.password)
+        conn.close()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Inactive user account"
+            )
+
+        # Create access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.username},
+            expires_delta=access_token_expires
+        )
+
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Login error: {e}")
+        raise HTTPException(status_code=500, detail="Login failed")
+
+
+@app.get("/api/admin/verify")
+async def verify_token(current_user: User = Depends(get_current_active_user)):
+    """Verify JWT token and return user info"""
+    return {"username": current_user.username, "email": current_user.email}
+
+
+@app.post("/api/admin/create-user")
+async def create_admin_user(
+    username: str,
+    email: str,
+    password: str,
+    full_name: str = None,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Create a new admin user (requires authentication)"""
+    try:
+        conn = get_pg_connection()
+        cursor = conn.cursor()
+
+        hashed_password = get_password_hash(password)
+
+        cursor.execute('''
+            INSERT INTO admin_users (username, email, hashed_password, full_name)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+        ''', (username, email, hashed_password, full_name))
+
+        user_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return {
+            "status": "success",
+            "message": f"User {username} created successfully",
+            "user_id": user_id
+        }
+
+    except psycopg2.IntegrityError as e:
+        raise HTTPException(status_code=400, detail="Username or email already exists")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    """SOC Dashboard homepage"""
+    """SOC Dashboard homepage - Protected by authentication in production"""
+    # In production, you would add: current_user: User = Depends(get_current_active_user)
+    # For development, dashboard is accessible without auth
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
 @app.get("/api/dashboard-data")
@@ -650,23 +784,78 @@ async def get_database_stats():
     try:
         conn = get_pg_connection()
         cursor = conn.cursor()
-        
+
         # Get spam database count
         cursor.execute('SELECT COUNT(*) FROM spam_database')
         spam_count = cursor.fetchone()[0] if cursor.fetchone() else 0
-        
+
         # Get phishing database count
         cursor.execute('SELECT COUNT(*) FROM phishing_database')
         phishing_count = cursor.fetchone()[0] if cursor.fetchone() else 0
-        
+
         cursor.close()
         conn.close()
-        
+
         return {
             'spamDatabaseCount': spam_count,
             'phishingDatabaseCount': phishing_count
         }
-        
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user-reports")
+async def get_user_reports(user_email: str = None):
+    """Get email reports by user - for admin dashboard"""
+    try:
+        conn = get_pg_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        if user_email:
+            cursor.execute('''
+                SELECT
+                    user_email,
+                    COUNT(*) as total_emails,
+                    COUNT(CASE WHEN prediction = 'spam' THEN 1 END) as spam_count,
+                    COUNT(CASE WHEN prediction = 'phishing' THEN 1 END) as phishing_count,
+                    AVG(confidence) as avg_confidence
+                FROM email_analysis
+                WHERE user_email = %s
+                GROUP BY user_email
+            ''', (user_email,))
+        else:
+            cursor.execute('''
+                SELECT
+                    user_email,
+                    COUNT(*) as total_emails,
+                    COUNT(CASE WHEN prediction = 'spam' THEN 1 END) as spam_count,
+                    COUNT(CASE WHEN prediction = 'phishing' THEN 1 END) as phishing_count,
+                    AVG(confidence) as avg_confidence
+                FROM email_analysis
+                WHERE user_email IS NOT NULL
+                GROUP BY user_email
+                ORDER BY total_emails DESC
+            ''')
+
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        return {
+            'users': [
+                {
+                    'user_email': row['user_email'],
+                    'total_emails': row['total_emails'],
+                    'spam_count': row['spam_count'],
+                    'phishing_count': row['phishing_count'],
+                    'threats_blocked': row['spam_count'] + row['phishing_count'],
+                    'avg_confidence': round(row['avg_confidence'] * 100, 1) if row['avg_confidence'] else 0
+                }
+                for row in results
+            ]
+        }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
